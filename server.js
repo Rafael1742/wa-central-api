@@ -294,7 +294,8 @@ app.post('/sends', async (req, res) => {
     status,
     reason = '',
     details = '',
-    messagePreview = ''
+    messagePreview = '',
+    createdAt = null
   } = req.body;
 
   const normalizedDestination = normalizePhone(destinationPhone);
@@ -307,9 +308,9 @@ app.post('/sends', async (req, res) => {
     const send = await client.query(`
       INSERT INTO sends (
         contact_id, batch_id, worker_id, session_id, sender_phone, destination_phone,
-        status, reason, details, message_preview
+        status, reason, details, message_preview, created_at
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,COALESCE($11::timestamptz, now()))
       RETURNING *
     `, [
       contactId || null,
@@ -321,7 +322,8 @@ app.post('/sends', async (req, res) => {
       status,
       reason,
       details,
-      messagePreview
+      messagePreview,
+      createdAt
     ]);
 
     await client.query(`
@@ -341,6 +343,19 @@ app.post('/sends', async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+app.delete('/report', async (req, res) => {
+  await pool.query(`
+    UPDATE contacts
+    SET status = 'pending',
+        reserved_by = NULL,
+        reserved_until = NULL,
+        updated_at = now()
+    WHERE status IN ('sent', 'failed', 'reserved')
+  `);
+  const result = await pool.query('DELETE FROM sends');
+  res.json({ ok: true, deleted: result.rowCount });
 });
 
 app.get('/report', async (req, res) => {
