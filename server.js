@@ -380,6 +380,20 @@ app.get('/report', async (req, res) => {
   res.json({ ok: true, report: rows });
 });
 
+app.get('/report/oldest-sent', async (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 2000);
+  const { rows } = await pool.query(`
+    SELECT destination_phone AS phone, MIN(created_at) AS "firstSentAt"
+    FROM sends
+    WHERE status = 'SENT'
+    GROUP BY destination_phone
+    ORDER BY MIN(id) ASC
+    LIMIT $1
+  `, [limit]);
+
+  res.json({ ok: true, contacts: rows });
+});
+
 app.get('/report/csv', async (req, res) => {
   const limit = Math.min(Math.max(Number(req.query.limit || 5000), 1), 20000);
   const { rows } = await pool.query(`
